@@ -26,22 +26,30 @@ apple_dataset/augmented/*/*
 *.weights
 *.zip
 
-# Ignore logs, checkpoints, and temporary files
+# Ignore logs and temporary files
 *.log
 *.tmp
 *.temp
 *.bak
 training_logs_ultimate/
-checkpoints/
-outputs/
 
-# Ignore evaluation results and generated plots
-evaluation_results/
-*.json
-*.png
-*.jpg
-*.jpeg
-*.gif
+# Ignore checkpoints in model folders
+mobilenetv2/checkpoints/
+resnet/checkpoints/
+efficientnet/checkpoints/
+
+# Ignore evaluation plots (but keep JSON results)
+mobilenetv2/results/*.png
+mobilenetv2/results/*.jpg
+resnet/results/*.png
+resnet/results/*.jpg
+efficientnet/results/*.png
+efficientnet/results/*.jpg
+
+# Ignore CSV logs (can get large)
+mobilenetv2/logs/*.csv
+resnet/logs/*.csv
+efficientnet/logs/*.csv
 
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -61,7 +69,6 @@ dist/
 # Ignore IDE/editor settings
 .vscode/
 .idea/
-*.swp
 
 # Ignore pytest cache
 .pytest_cache/
