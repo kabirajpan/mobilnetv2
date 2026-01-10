@@ -1,0 +1,25 @@
+# ResNet Training
+
+This folder contains the ResNet model training scripts for apple disease classification.
+
+## Status
+
+🚧 **Coming Soon** - Training script will be added here.
+
+## Planned Features
+
+- ResNet50 or ResNet101 architecture
+- Optimized for 95%+ accuracy
+- Two-phase training strategy
+- Test-Time Augmentation (TTA)
+
+## Folder Structure
+
+```
+resnet/
+├── train.py          # Training script (to be added)
+├── checkpoints/      # Saved models
+├── logs/            # Training logs
+└── results/         # Evaluation results
+```
+

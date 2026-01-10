@@ -1,0 +1,42 @@
+# Apple Leaf Disease Classification - Requirements
+# Python 3.8+ recommended
+
+# Core Deep Learning Framework
+tensorflow==2.19.0
+
+# Data Processing & Scientific Computing
+numpy>=1.21.0
+pandas>=1.3.0
+
+# Image Processing
+Pillow>=8.3.0
+opencv-python>=4.5.0
+
+# Machine Learning Utilities
+scikit-learn>=1.0.0
+
+# Data Visualization
+matplotlib>=3.4.0
+seaborn>=0.11.0
+
+# Progress Bars & Utilities
+tqdm>=4.62.0
+
+# Optional: For better performance
+# tensorflow-gpu==2.19.0  # Uncomment if GPU available
+
+# Installation Instructions:
+# 1. Create virtual environment: python -m venv ml_env
+# 2. Activate environment: source ml_env/bin/activate (Linux/Mac) or ml_env\Scripts\activate (Windows)
+# 3. Install requirements: pip install -r requirements.txt
+
+# Hardware Requirements:
+# - CPU: i3 6th gen or better
+# - RAM: 8GB recommended (4GB minimum)
+# - Storage: 5GB free space
+# - OS: Linux, Windows, macOS
+
+# Notes:
+# - TensorFlow 2.19.0 includes Keras by default
+# - All packages tested on Ubuntu 20.04+ and Windows 10+
+# - For M1/M2 Macs, use: pip install tensorflow-macos
