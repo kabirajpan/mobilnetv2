@@ -251,7 +251,7 @@ def create_resnet_aggressive(num_classes):
     return model, base_model
 
 
-model, base_model = create_resnet_model(train_generator.num_classes)
+model, base_model = create_resnet_aggressive(train_generator.num_classes)
 
 print(f"\n🧠 ResNet50 Model: {model.count_params():,} parameters")
 print(f"   Classifier head: 512→256 (larger than before)")
