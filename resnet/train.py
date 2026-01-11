@@ -1,17 +1,15 @@
 """
-OPTIMIZED ResNet50 Training for Apple Disease Classification
-==============================================================
-Mirrors MobileNetV2 training strategy for fair comparison:
-1. ✅ Mixed precision training (30% faster)
-2. ✅ Fixed TTA with proper normalization
-3. ✅ Enhanced augmentation strategy
-4. ✅ Same hyperparameters as MobileNetV2
-5. ✅ Better learning rate scheduling
-6. ✅ Optimized layer unfreezing strategy
-7. ✅ Comprehensive evaluation with MAP
+FIXED ResNet50 Training for Apple Disease Classification
+==========================================================
+Fixed issues from previous training:
+1. ✅ Unfreeze FEWER layers (only last 10 instead of 40)
+2. ✅ LOWER learning rate (1e-5 instead of 2.5e-5)
+3. ✅ MORE Phase 1 epochs (20 instead of 12)
+4. ✅ Conservative fine-tuning to prevent catastrophic forgetting
+5. ✅ Better optimization specifically for ResNet50
 
-Target: Compare with MobileNetV2 (90% baseline)
-Expected time: ~2-2.5 hours (i3 6th gen)
+Expected: 88-92% accuracy (competitive with MobileNetV2)
+Expected time: ~40-50 minutes on Google Colab T4
 """
 
 import os
@@ -66,7 +64,7 @@ sns.set_palette("husl")
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 # ============================
-# CONFIGURATION
+# CONFIGURATION - FIXED FOR RESNET50
 # ============================
 tf.config.threading.set_intra_op_parallelism_threads(2)
 tf.config.threading.set_inter_op_parallelism_threads(2)
@@ -80,31 +78,37 @@ try:
 except:
     print("⚠️  Mixed precision not available, using float32")
 
-# SAME hyperparameters as MobileNetV2 for fair comparison
+# FIXED hyperparameters optimized for ResNet50
 IMAGE_SIZE = (128, 128)
 BATCH_SIZE = 12
-EPOCHS_PHASE1 = 12
-EPOCHS_PHASE2 = 6
+EPOCHS_PHASE1 = 20  # ✅ INCREASED from 12 (ResNet needs more warmup)
+EPOCHS_PHASE2 = 8   # ✅ INCREASED from 6 (but conservative fine-tuning)
 DATA_DIR = "../apple_dataset/raw"
 AUGMENTED_DATA_DIR = "../apple_dataset/augmented"
-MODEL_SAVE_PATH = "checkpoints/best_resnet50_optimized.keras"
-BEST_MODEL_PATH = "checkpoints/best_resnet50_optimized_phase2.keras"
+MODEL_SAVE_PATH = "checkpoints/best_resnet50_fixed.keras"
+BEST_MODEL_PATH = "checkpoints/best_resnet50_fixed_phase2.keras"
 LOG_DIR = "./logs"
 RESULTS_DIR = "./results"
 LABEL_SMOOTHING = 0.08
 
 print("=" * 70)
-print("🎯 OPTIMIZED ResNet50 Training - Fair Comparison with MobileNetV2")
+print("🎯 FIXED ResNet50 Training - Proper Optimization")
 print("=" * 70)
 print(f"📐 Image size: {IMAGE_SIZE}")
 print(f"📦 Batch size: {BATCH_SIZE}")
 print(f"🎓 Label smoothing: {LABEL_SMOOTHING}")
 print(f"⚡ Mixed precision: Enabled")
-print(f"📊 Phase 1 epochs: {EPOCHS_PHASE1} (transfer learning)")
-print(f"📊 Phase 2 epochs: {EPOCHS_PHASE2} (fine-tuning)")
+print(f"📊 Phase 1 epochs: {EPOCHS_PHASE1} (↑ from 12 - ResNet needs more)")
+print(f"📊 Phase 2 epochs: {EPOCHS_PHASE2} (conservative fine-tuning)")
 print(f"📊 Total epochs: {EPOCHS_PHASE1 + EPOCHS_PHASE2}")
-print(f"⏱️  Expected time: ~2-2.5 hours (i3 6th gen)")
-print(f"📊 Baseline to beat: MobileNetV2 90%")
+print(f"⏱️  Expected time: ~40-50 minutes (Google Colab T4)")
+print(f"🎯 Expected accuracy: 88-92%")
+print("=" * 70)
+print("\n✅ FIXES APPLIED:")
+print("   • Unfreeze only last 10 layers (was 40)")
+print("   • Lower learning rate: 1e-5 (was 2.5e-5)")
+print("   • More Phase 1 epochs: 20 (was 12)")
+print("   • Conservative fine-tuning to prevent catastrophic forgetting")
 print("=" * 70)
 
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -214,7 +218,7 @@ print(f"   Classes: {list(train_generator.class_indices.keys())}")
 # RESNET50 MODEL ARCHITECTURE
 # ============================
 def create_resnet_model(num_classes):
-    """Create ResNet50 model with custom head (similar to MobileNetV2)"""
+    """Create ResNet50 model with custom head"""
     base_model = ResNet50(
         weights="imagenet",
         include_top=False,
@@ -225,7 +229,7 @@ def create_resnet_model(num_classes):
     x = GlobalAveragePooling2D()(x)
     x = BatchNormalization()(x)
     
-    # Enhanced classifier head (same structure as MobileNetV2)
+    # Enhanced classifier head (same as MobileNetV2)
     x = Dense(320, activation="relu", kernel_regularizer=l2(0.001))(x)
     x = Dropout(0.5)(x)
     x = BatchNormalization()(x)
@@ -243,7 +247,6 @@ def create_resnet_model(num_classes):
 model, base_model = create_resnet_model(train_generator.num_classes)
 
 print(f"\n🧠 ResNet50 Model: {model.count_params():,} parameters")
-print(f"   (MobileNetV2 has ~3.5M parameters for comparison)")
 
 # ============================
 # CALLBACKS
@@ -263,13 +266,13 @@ def create_callbacks(phase_name):
         ReduceLROnPlateau(
             monitor="val_accuracy",
             factor=0.5,
-            patience=5,
-            min_lr=1e-7,
+            patience=6,  # More patience for ResNet
+            min_lr=1e-8,
             verbose=1,
         ),
         EarlyStopping(
             monitor="val_accuracy",
-            patience=6,
+            patience=8,  # More patience for ResNet
             restore_best_weights=True,
             verbose=1,
         ),
@@ -293,7 +296,7 @@ model.compile(
 )
 
 phase1_start = time.time()
-print("🚀 Starting Phase 1 training...")
+print("🚀 Starting Phase 1 training (20 epochs for better convergence)...")
 
 history_phase1 = model.fit(
     train_generator,
@@ -307,32 +310,33 @@ phase1_time = time.time() - phase1_start
 print(f"\n✅ Phase 1 completed in {phase1_time / 60:.1f} minutes")
 
 # ============================
-# PHASE 2: FINE-TUNING
+# PHASE 2: CONSERVATIVE FINE-TUNING
 # ============================
 print("\n" + "=" * 70)
-print("PHASE 2: FINE-TUNING (Optimized Strategy)")
+print("PHASE 2: CONSERVATIVE FINE-TUNING (Fixed Strategy)")
 print("=" * 70)
 
 base_model.trainable = True
 
-# Unfreeze last 40 layers of ResNet50 (similar ratio to MobileNetV2)
-# ResNet50 has 175 layers total, freeze first 135
-for layer in base_model.layers[:135]:
+# ✅ FIX: Unfreeze ONLY last 10 layers (was 40!)
+# ResNet50 has 175 layers, freeze first 165
+print("🔧 Applying CONSERVATIVE unfreezing strategy...")
+for layer in base_model.layers[:165]:  # ✅ FIXED: Was 135, now 165
     layer.trainable = False
 
-for layer in base_model.layers[135:]:
+for layer in base_model.layers[165:]:
     layer.trainable = True
 
 trainable = sum([tf.size(w).numpy() for w in model.trainable_weights])
 print(f"🔓 Trainable parameters in Phase 2: {trainable:,}")
+print(f"   (Only last 10 ResNet layers + custom head)")
 
-
-# Same cosine annealing with warmup as MobileNetV2
-def cosine_annealing_with_warmup(epoch):
-    """Cosine annealing with warmup for better convergence"""
+# ✅ FIX: LOWER learning rate for ResNet stability
+def conservative_cosine_annealing(epoch):
+    """Conservative cosine annealing - LOWER max LR for ResNet"""
     warmup_epochs = 4
-    max_lr = 2.5e-5
-    min_lr = 5e-7
+    max_lr = 1e-5      # ✅ FIXED: Was 2.5e-5, now 1e-5 (60% lower!)
+    min_lr = 1e-7      # ✅ FIXED: Was 5e-7, now 1e-7 (80% lower!)
 
     if epoch < warmup_epochs:
         return min_lr + (max_lr - min_lr) * (epoch / warmup_epochs)
@@ -342,15 +346,18 @@ def cosine_annealing_with_warmup(epoch):
 
 
 model.compile(
-    optimizer=Adam(learning_rate=1e-5, beta_1=0.9, beta_2=0.999),
+    optimizer=Adam(learning_rate=1e-6, beta_1=0.9, beta_2=0.999),  # ✅ Lower initial LR
     loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=LABEL_SMOOTHING),
     metrics=["accuracy"],
 )
 
 callbacks_phase2 = create_callbacks("phase2")
-callbacks_phase2.append(LearningRateScheduler(cosine_annealing_with_warmup, verbose=1))
+callbacks_phase2.append(LearningRateScheduler(conservative_cosine_annealing, verbose=1))
 
-print("🚀 Starting Phase 2 training with optimized strategy...")
+print("🚀 Starting Phase 2 with CONSERVATIVE fine-tuning...")
+print("   • Only 10 layers unfrozen (prevents catastrophic forgetting)")
+print("   • Lower learning rate (1e-5 max, was 2.5e-5)")
+print("   • More patience (prevents premature stopping)")
 phase2_start = time.time()
 
 history_phase2 = model.fit(
@@ -396,7 +403,7 @@ print(f"   Generalization Gap:  {abs(train_acc - val_acc):.4f}")
 
 # Same TTA function as MobileNetV2
 def optimized_tta(model, val_gen, n_aug=7):
-    """Optimized TTA with proper normalization (same as MobileNetV2)"""
+    """Optimized TTA with proper normalization"""
     print(f"\n🔄 Running Optimized TTA ({n_aug} augmentations)...")
     start = time.time()
 
@@ -584,7 +591,7 @@ for i in range(num_classes):
     fpr, tpr, _ = roc_curve(y_true_binary, y_pred_binary)
     roc_auc = auc(fpr, tpr)
     roc_aucs.append(roc_auc)
-    axes[1, 0].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {roc_auc:.3f})')
+    axes[1, 0].plot(fpr, tpr, label=f'{class_names[i]} (AUC = {roc_auc:.3f}')
 
 axes[1, 0].set_xlabel('False Positive Rate', fontsize=12)
 axes[1, 0].set_ylabel('True Positive Rate', fontsize=12)
@@ -607,7 +614,7 @@ axes[1, 1].legend(loc='lower left')
 axes[1, 1].grid(True, alpha=0.3)
 
 plt.tight_layout()
-plots_file = os.path.join(RESULTS_DIR, f"evaluation_plots_{timestamp}.png")
+plots_file = os.path.join(RESULTS_DIR, f"evaluation_plots_fixed_{timestamp}.png")
 plt.savefig(plots_file, dpi=300, bbox_inches='tight')
 print(f"✅ Evaluation plots saved: {plots_file}")
 plt.close()
@@ -628,7 +635,7 @@ phase1_epochs = len(history_phase1.history['accuracy'])
 axes[0, 0].plot(epochs, combined_acc, 'b-o', label='Training Accuracy', linewidth=2, markersize=4)
 axes[0, 0].plot(epochs, combined_val_acc, 'r-o', label='Validation Accuracy', linewidth=2, markersize=4)
 axes[0, 0].axvline(x=phase1_epochs, color='green', linestyle='--', alpha=0.7, label='Fine-tuning Start')
-axes[0, 0].set_title('Model Accuracy', fontsize=14, fontweight='bold')
+axes[0, 0].set_title('Model Accuracy (FIXED)', fontsize=14, fontweight='bold')
 axes[0, 0].set_xlabel('Epochs')
 axes[0, 0].set_ylabel('Accuracy')
 axes[0, 0].legend()
@@ -639,7 +646,7 @@ axes[0, 0].set_ylim([0, 1])
 axes[0, 1].plot(epochs, combined_loss, 'b-o', label='Training Loss', linewidth=2, markersize=4)
 axes[0, 1].plot(epochs, combined_val_loss, 'r-o', label='Validation Loss', linewidth=2, markersize=4)
 axes[0, 1].axvline(x=phase1_epochs, color='green', linestyle='--', alpha=0.7, label='Fine-tuning Start')
-axes[0, 1].set_title('Model Loss', fontsize=14, fontweight='bold')
+axes[0, 1].set_title('Model Loss (FIXED)', fontsize=14, fontweight='bold')
 axes[0, 1].set_xlabel('Epochs')
 axes[0, 1].set_ylabel('Loss')
 axes[0, 1].legend()
@@ -662,7 +669,7 @@ axes[1, 0].legend()
 axes[1, 0].grid(True, alpha=0.3, axis='y')
 
 # Summary metrics
-summary_text = f"""ResNet50 Performance Summary
+summary_text = f"""ResNet50 FIXED Performance
 
 Overall Accuracy: {val_acc:.4f} ({val_acc*100:.2f}%)
 TTA Accuracy: {tta_acc:.4f} ({tta_acc*100:.2f}%)
@@ -678,8 +685,6 @@ Weighted Recall: {weighted_recall:.4f}
 Weighted F1-Score: {weighted_f1:.4f}
 
 Training Time: {total_time/60:.1f} min ({total_time/3600:.2f} hrs)
-
-Comparison: MobileNetV2 = 90%
 """
 
 axes[1, 1].text(0.1, 0.5, summary_text, fontsize=11,
@@ -689,7 +694,7 @@ axes[1, 1].text(0.1, 0.5, summary_text, fontsize=11,
 axes[1, 1].axis('off')
 
 plt.tight_layout()
-training_plots_file = os.path.join(RESULTS_DIR, f"training_curves_{timestamp}.png")
+training_plots_file = os.path.join(RESULTS_DIR, f"training_curves_fixed_{timestamp}.png")
 plt.savefig(training_plots_file, dpi=300, bbox_inches='tight')
 print(f"✅ Training curves saved: {training_plots_file}")
 plt.close()
@@ -698,7 +703,7 @@ plt.close()
 # SAVE RESULTS
 # ============================
 results = {
-    "model": "ResNet50",
+    "model": "ResNet50_FIXED",
     "image_size": IMAGE_SIZE,
     "batch_size": BATCH_SIZE,
     "epochs_phase1": EPOCHS_PHASE1,
@@ -730,18 +735,24 @@ results = {
     "total_time_hours": float(total_time / 3600),
     "using_preaugmented": using_preaugmented,
     "timestamp": timestamp,
-    "comparison_baseline": "MobileNetV2 90%"
+    "fixes_applied": {
+        "unfrozen_layers": "Last 10 only (was 40)",
+        "max_learning_rate": "1e-5 (was 2.5e-5)",
+        "phase1_epochs": "20 (was 12)",
+        "phase2_epochs": "8 (was 6)",
+        "strategy": "Conservative fine-tuning to prevent catastrophic forgetting"
+    }
 }
 
-results_file = os.path.join(RESULTS_DIR, f"results_{timestamp}.json")
+results_file = os.path.join(RESULTS_DIR, f"results_fixed_{timestamp}.json")
 with open(results_file, 'w') as f:
     json.dump(results, f, indent=2)
 
 # ============================
-# FINAL RESULTS & COMPARISON
+# FINAL RESULTS
 # ============================
 print("\n" + "=" * 70)
-print("🎉 RESNET50 TRAINING RESULTS")
+print("🎉 OPTIMIZED TRAINING RESULTS")
 print("=" * 70)
 print(f"📊 Standard Accuracy:  {val_acc:.4f} ({val_acc * 100:.2f}%)")
 print(f"🚀 TTA Accuracy:       {tta_acc:.4f} ({tta_acc * 100:.2f}%)")
@@ -751,41 +762,27 @@ print(f"📊 Macro F1-Score:     {macro_f1:.4f} ({macro_f1 * 100:.2f}%)")
 print(f"⏱️  Total Time:        {total_time / 60:.1f} minutes ({total_time / 3600:.2f} hours)")
 print("=" * 70)
 
-# Comparison with MobileNetV2
-mobilenet_baseline = 0.90
-print(f"\n📊 COMPARISON WITH MOBILENETV2:")
-print(f"   MobileNetV2:  90.00%")
-print(f"   ResNet50:     {tta_acc * 100:.2f}%")
-
-if tta_acc > mobilenet_baseline:
-    diff = (tta_acc - mobilenet_baseline) * 100
-    print(f"   🏆 ResNet50 WINS by {diff:+.2f}%!")
-elif tta_acc < mobilenet_baseline:
-    diff = (mobilenet_baseline - tta_acc) * 100
-    print(f"   🏆 MobileNetV2 WINS by {diff:.2f}%")
-else:
-    print(f"   🤝 TIE - Both models perform equally!")
-
-print("\n📝 Analysis:")
 if tta_acc >= 0.92:
-    print("   ✅ ResNet50 achieves excellent accuracy (92%+)")
+    print("🏆 EXCELLENT: 92%+ accuracy achieved!")
 elif tta_acc >= 0.90:
-    print("   ✅ ResNet50 achieves competitive accuracy (90%+)")
+    print("🏆 SUCCESS: 90%+ accuracy achieved! 🎯")
 elif tta_acc >= 0.88:
-    print("   ✅ ResNet50 shows good performance (88%+)")
+    print("🎖️  VERY GOOD: 88%+ accuracy - competitive with MobileNetV2!")
+elif tta_acc >= 0.85:
+    print("✅ GOOD: 85%+ accuracy - significant improvement over broken version!")
 else:
-    print("   ℹ️  ResNet50 shows room for improvement")
+    print("⚠️  Needs more tuning, but better than 49%!")
 
-print(f"\n💡 Key Observations:")
-print(f"   • ResNet50 parameters: {model.count_params():,}")
-print(f"   • MobileNetV2 parameters: ~3.5M")
-print(f"   • Training time: {total_time / 60:.1f} min")
-if tta_acc > mobilenet_baseline:
-    print(f"   • ResNet50 provides better accuracy but more parameters")
-else:
-    print(f"   • MobileNetV2 provides better efficiency-accuracy tradeoff")
+print(f"\n✅ FIXES APPLIED & RESULTS:")
+print(f"   • Unfroze only 10 layers (was 40) ✅")
+print(f"   • Lower LR: 1e-5 max (was 2.5e-5) ✅")
+print(f"   • More Phase 1: 20 epochs (was 12) ✅")
+print(f"   • Conservative fine-tuning ✅")
+print(f"   • Previous broken result: 49.81%")
+print(f"   • Current FIXED result: {tta_acc * 100:.2f}%")
+print(f"   • Improvement: {(tta_acc - 0.4981) * 100:+.2f}%")
 
-# Save final model
+# Save model
 best_model.save(MODEL_SAVE_PATH)
 print(f"\n💾 Model saved: {MODEL_SAVE_PATH}")
 print(f"📊 Results saved: {results_file}")
@@ -793,13 +790,13 @@ print(f"📈 Evaluation plots saved: {plots_file}")
 print(f"📈 Training curves saved: {training_plots_file}")
 
 print("\n" + "=" * 70)
-print("✅ RESNET50 TRAINING COMPLETE!")
+print("✅ FIXED RESNET50 TRAINING COMPLETE!")
 print("=" * 70)
 print(f"🎯 Final TTA Accuracy: {tta_acc * 100:.2f}%")
-print(f"📊 Comparison baseline: MobileNetV2 = 90.00%")
-print("\n📝 Next Steps for Research Paper:")
-print("   1. Compare results from both models")
-print("   2. Analyze per-class performance differences")
-print("   3. Consider parameter count vs accuracy tradeoff")
-print("   4. Evaluate inference time for deployment")
+print(f"📊 Expected range: 88-92% (if fixes worked properly)")
+if tta_acc >= 0.88:
+    print(f"🎉 SUCCESS: ResNet50 is now competitive with MobileNetV2!")
+    print(f"   Ready for fair comparison in research paper!")
+else:
+    print(f"ℹ️  Result: {tta_acc * 100:.2f}% - check training logs for issues")
 print("=" * 70)
