@@ -29,9 +29,9 @@ import seaborn as sns
 from datetime import datetime
 import json
 
-# Import augmentation config from scripts
-sys.path.append('../scripts')
-from augment_config import augment_config
+# Import augmentation config from scripts (optional)
+# sys.path.append('../scripts')
+# from augment_config import augment_config
 
 # ============================================================================
 # CONFIGURATION
@@ -42,7 +42,8 @@ class Config:
     
     # Paths
     BASE_DIR = "."
-    DATA_DIR = "../apple_dataset/augmented"
+    DATA_DIR = "../apple_dataset/raw"
+    AUGMENTED_DATA_DIR = "../apple_dataset/augmented"
     CHECKPOINT_DIR = "./checkpoints"
     LOGS_DIR = "./logs"
     RESULTS_DIR = "./results"
@@ -120,17 +121,59 @@ def create_directories():
 create_directories()
 
 # ============================================================================
+# DATA SOURCE SELECTION
+# ============================================================================
+
+def select_data_source():
+    """
+    Select best available data source (augmented or raw).
+    Matches the logic from MobileNetV2 and ResNet training scripts.
+    """
+    if os.path.exists(Config.AUGMENTED_DATA_DIR):
+        aug_classes = [
+            d for d in os.listdir(Config.AUGMENTED_DATA_DIR)
+            if os.path.isdir(os.path.join(Config.AUGMENTED_DATA_DIR, d))
+        ]
+        
+        if len(aug_classes) >= 4:
+            total_aug = 0
+            for class_dir in aug_classes:
+                class_path = os.path.join(Config.AUGMENTED_DATA_DIR, class_dir)
+                images = [
+                    f for f in os.listdir(class_path)
+                    if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+                ]
+                total_aug += len(images)
+            
+            if total_aug > 500:
+                print(f"[INFO] Using pre-augmented dataset: {total_aug:,} images")
+                print(f"[INFO] Data source: {Config.AUGMENTED_DATA_DIR}")
+                return Config.AUGMENTED_DATA_DIR, True
+    
+    print(f"[INFO] Using original raw dataset")
+    print(f"[INFO] Data source: {Config.DATA_DIR}")
+    return Config.DATA_DIR, False
+
+# Select data source
+SELECTED_DATA_DIR, using_preaugmented = select_data_source()
+
+# ============================================================================
 # DATA LOADING & AUGMENTATION
 # ============================================================================
 
 def create_data_generators():
     """
     Create training and validation data generators with augmentation.
-    Uses enhanced augmentation from augment_config.py
+    Automatically uses augmented data if available, otherwise uses raw data.
     """
     print("\n" + "="*70)
     print("DATA PREPARATION")
     print("="*70)
+    
+    if using_preaugmented:
+        print("[INFO] Using pre-augmented data with light additional augmentation")
+    else:
+        print("[INFO] Using raw data with aggressive augmentation")
     
     # Training data generator with aggressive augmentation
     train_datagen = ImageDataGenerator(
@@ -156,7 +199,7 @@ def create_data_generators():
     
     # Load training data
     train_generator = train_datagen.flow_from_directory(
-        Config.DATA_DIR,
+        SELECTED_DATA_DIR,  # Use selected data source
         target_size=Config.INPUT_SHAPE[:2],
         batch_size=Config.PHASE1_BATCH_SIZE,
         class_mode='categorical',
@@ -167,7 +210,7 @@ def create_data_generators():
     
     # Load validation data
     validation_generator = val_datagen.flow_from_directory(
-        Config.DATA_DIR,
+        SELECTED_DATA_DIR,  # Use selected data source
         target_size=Config.INPUT_SHAPE[:2],
         batch_size=Config.PHASE1_BATCH_SIZE,
         class_mode='categorical',
@@ -623,7 +666,7 @@ def test_time_augmentation(model, val_gen, tta_steps=7):
         
         # Create temporary generator for this TTA step
         tta_gen = tta_datagen.flow_from_directory(
-            Config.DATA_DIR,
+            SELECTED_DATA_DIR,  # Use selected data source
             target_size=Config.INPUT_SHAPE[:2],
             batch_size=val_gen.batch_size,
             class_mode='categorical',
