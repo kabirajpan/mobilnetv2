@@ -25,12 +25,15 @@ class Config:
     RESULTS_DIR = os.path.join(OUTPUT_DIR, 'results')
     LOGS_DIR = os.path.join(OUTPUT_DIR, 'logs')
     
-    # Model parameters
-    IMG_SIZE = 224  # EfficientNet standard input
-    BATCH_SIZE = 8  # Small batch for i3 processor
+    # Device - AUTO DETECT
+    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Model parameters - AUTO ADJUST based on device
+    IMG_SIZE = 224
+    BATCH_SIZE = 32 if torch.cuda.is_available() else 8
     NUM_EPOCHS = 50
     LEARNING_RATE = 0.001
-    NUM_WORKERS = 2  # Limited for i3 6th gen
+    NUM_WORKERS = 2
     
     # Classes
     CLASSES = ['alternaria', 'healthy', 'rust', 'scab']
@@ -40,9 +43,6 @@ class Config:
     VALIDATION_SPLIT = 0.2
     RANDOM_SEED = 42
     EARLY_STOPPING_PATIENCE = 10
-    
-    # Device
-    DEVICE = torch.device('cpu')  # i3 doesn't have good GPU support
 
 # Create directories
 for directory in [Config.CHECKPOINTS_DIR, Config.RESULTS_DIR, Config.LOGS_DIR]:
@@ -97,7 +97,7 @@ def load_dataset():
     
     return image_paths, labels
 
-# Data transforms (lightweight for CPU)
+# Data transforms
 def get_transforms():
     train_transform = transforms.Compose([
         transforms.Resize((Config.IMG_SIZE, Config.IMG_SIZE)),
@@ -285,7 +285,7 @@ def main():
         batch_size=Config.BATCH_SIZE,
         shuffle=True,
         num_workers=Config.NUM_WORKERS,
-        pin_memory=False
+        pin_memory=True if torch.cuda.is_available() else False
     )
     
     val_loader = DataLoader(
@@ -293,7 +293,7 @@ def main():
         batch_size=Config.BATCH_SIZE,
         shuffle=False,
         num_workers=Config.NUM_WORKERS,
-        pin_memory=False
+        pin_memory=True if torch.cuda.is_available() else False
     )
     
     # Create model
@@ -303,7 +303,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=Config.LEARNING_RATE)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=5, verbose=True
+        optimizer, mode='min', factor=0.5, patience=5
     )
     
     # Training history
